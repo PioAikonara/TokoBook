@@ -1,0 +1,19 @@
+# Ignore uploads folder (contains user uploaded files)
+bookstore-app/src/uploads/books/*
+bookstore-app/src/uploads/payments/*
+
+# Keep the directory structure
+!bookstore-app/src/uploads/books/.gitkeep
+!bookstore-app/src/uploads/payments/.gitkeep
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
