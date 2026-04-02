@@ -1,360 +1,235 @@
 <?php
 session_start();
-require_once 'includes/config.php';
-require_once 'includes/database.php';
+require_once "includes/config.php";
+require_once "includes/database.php";
 
 $database = new Database();
 $db = $database->getConnection();
 
-// Get featured books
-$query = "SELECT b.*, c.name as category_name FROM books b 
-          LEFT JOIN categories c ON b.category_id = c.id 
-          WHERE b.stock > 0 
-          ORDER BY b.created_at DESC LIMIT 8";
-$stmt = $db->prepare($query);
-$stmt->execute();
-$books = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$cat_query = "SELECT c.*, (SELECT image FROM books WHERE category_id = c.id LIMIT 1) as cat_image FROM categories c LIMIT 6";
+$cat_stmt = $db->prepare($cat_query);
+$cat_stmt->execute();
+$categories = $cat_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$page_title = 'Beranda';
-include 'includes/header.php';
+$best_query = "SELECT b.*, c.name as category_name FROM books b LEFT JOIN categories c ON b.category_id = c.id ORDER BY RAND() LIMIT 5";
+$best_stmt = $db->prepare($best_query);
+$best_stmt->execute();
+$best_sellers = $best_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$page_title = "Beranda";
+include "includes/header.php";
 ?>
 
 <style>
-    .hero-minimal {
-        background: #2c3e50;
-        color: white;
-        padding: 120px 20px 80px;
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .hero-minimal::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(135deg, rgba(52, 73, 94, 0.8) 0%, rgba(44, 62, 80, 0.95) 100%);
-    }
-    
-    .hero-content {
-        position: relative;
-        z-index: 1;
-        max-width: 800px;
-        margin: 0 auto;
-        text-align: center;
-    }
-    
-    .hero-minimal h1 {
-        font-size: 3.5rem;
-        font-weight: 700;
-        margin-bottom: 1.5rem;
-        line-height: 1.2;
-        letter-spacing: -1px;
-    }
-    
-    .hero-minimal p {
-        font-size: 1.25rem;
-        margin-bottom: 2.5rem;
-        opacity: 0.9;
-        font-weight: 300;
-    }
-    
-    .hero-btn {
-        display: inline-block;
-        padding: 16px 48px;
-        background: white;
-        color: #2c3e50;
-        text-decoration: none;
-        border-radius: 8px;
-        font-size: 16px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
-    
-    .hero-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap");
+
+    :root {
+        --primary: #4834d4;
+        --secondary: #686de0;
+        --dark: #130f40;
+        --light: #f9f9ff;
+        --white: #ffffff;
     }
 
-    .section-header {
-        text-align: center;
-        margin-bottom: 50px;
-    }
-    
-    .section-header h2 {
-        font-size: 2.5rem;
-        color: #2c3e50;
-        margin-bottom: 10px;
-        font-weight: 600;
-    }
-    
-    .section-header p {
-        color: #7f8c8d;
-        font-size: 1.1rem;
+    body {
+        font-family: "Plus Jakarta Sans", sans-serif;
+        background-color: var(--light);
+        margin: 0;
+        color: var(--dark);
     }
 
-    .book-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-        gap: 30px;
-        margin-bottom: 50px;
-    }
-    
-    .book-card {
-        background: white;
-        border-radius: 12px;
-        overflow: hidden;
-        transition: all 0.3s ease;
-        border: 1px solid #e8e8e8;
-    }
-    
-    .book-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        border-color: #d0d0d0;
-    }
-    
-    .book-image {
-        height: 320px;
-        background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+    .hero-creative {
+        padding: 100px 20px;
+        background: var(--white);
         display: flex;
         align-items: center;
-        justify-content: center;
-        overflow: hidden;
-        position: relative;
-    }
-    
-    .book-image img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-    
-    .book-info {
-        padding: 20px;
-    }
-    
-    .book-category {
-        display: inline-block;
-        background: #ecf0f1;
-        color: #34495e;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 500;
-        margin-bottom: 12px;
-    }
-    
-    .book-title {
-        font-size: 17px;
-        color: #2c3e50;
-        margin: 0 0 8px 0;
-        font-weight: 600;
-        height: 48px;
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-    }
-    
-    .book-author {
-        color: #95a5a6;
-        font-size: 14px;
-        margin: 0 0 15px 0;
-    }
-    
-    .book-price {
-        color: #2c3e50;
-        font-size: 22px;
-        font-weight: 700;
-        margin: 15px 0;
-    }
-    
-    .book-btn {
-        display: block;
-        text-align: center;
-        padding: 12px;
-        background: #2c3e50;
-        color: white;
-        text-decoration: none;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-    
-    .book-btn:hover {
-        background: #34495e;
-    }
-
-    .view-all-btn {
-        display: inline-block;
-        padding: 14px 40px;
-        background: #2c3e50;
-        color: white;
-        text-decoration: none;
-        border-radius: 8px;
-        font-size: 15px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-    
-    .view-all-btn:hover {
-        background: #34495e;
-        transform: translateY(-2px);
-    }
-
-    .features-section {
-        background: #f8f9fa;
-        padding: 80px 20px;
-    }
-    
-    .features-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 40px;
         max-width: 1200px;
         margin: 0 auto;
-    }
-    
-    .feature-card {
-        text-align: center;
-        padding: 40px 20px;
-        background: white;
-        border-radius: 12px;
-        transition: all 0.3s ease;
-        border: 1px solid #e8e8e8;
-    }
-    
-    .feature-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-    }
-    
-    .feature-icon {
-        font-size: 60px;
-        margin-bottom: 20px;
-    }
-    
-    .feature-card h3 {
-        color: #2c3e50;
-        font-size: 20px;
-        margin-bottom: 12px;
-        font-weight: 600;
-    }
-    
-    .feature-card p {
-        color: #7f8c8d;
-        font-size: 15px;
-        line-height: 1.6;
+        gap: 50px;
     }
 
-    @media (max-width: 768px) {
-        .hero-minimal h1 {
-            font-size: 2.5rem;
-        }
-        
-        .hero-minimal p {
-            font-size: 1.1rem;
-        }
-        
-        .section-header h2 {
-            font-size: 2rem;
-        }
-        
-        .book-grid {
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 20px;
-        }
+    .hero-text { flex: 1; }
+    .hero-text h1 {
+        font-size: 4.5rem;
+        line-height: 1;
+        font-weight: 800;
+        margin-bottom: 20px;
+        background: linear-gradient(to right, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .hero-text p {
+        font-size: 1.25rem;
+        color: #535c68;
+        margin-bottom: 30px;
+        max-width: 500px;
+    }
+
+    .btn-main {
+        padding: 18px 40px;
+        background: var(--dark);
+        color: var(--white);
+        text-decoration: none;
+        border-radius: 50px;
+        font-weight: 600;
+        display: inline-block;
+        transition: 0.3s;
+    }
+
+    .btn-main:hover { transform: scale(1.05); box-shadow: 0 10px 20px rgba(19, 15, 64, 0.2); }
+
+    .hero-visual {
+        flex: 1;
+        position: relative;
+        display: flex;
+        justify-content: center;
+    }
+
+    .floating-card {
+        width: 300px;
+        height: 400px;
+        background: var(--primary);
+        border-radius: 30px;
+        transform: rotate(-10deg);
+        position: relative;
+        z-index: 1;
+        overflow: hidden;
+        box-shadow: 20px 20px 60px rgba(0,0,0,0.1);
+    }
+
+    /* Bento Grid Features */
+    .bento-container {
+        max-width: 1200px;
+        margin: 50px auto;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        grid-template-rows: repeat(2, 300px);
+        gap: 20px;
+        padding: 0 20px;
+    }
+
+    .bento-item {
+        background: var(--white);
+        border-radius: 32px;
+        padding: 30px;
+        position: relative;
+        overflow: hidden;
+        transition: 0.3s;
+        border: 1px solid rgba(0,0,0,0.03);
+    }
+
+    .bento-item:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.05); }
+
+    .bento-big { grid-column: span 2; grid-row: span 2; background: var(--dark); color: var(--white); }
+    .bento-wide { grid-column: span 2; }
+
+    .cat-pill {
+        display: inline-block;
+        padding: 8px 20px;
+        background: #f0f0f0;
+        border-radius: 100px;
+        margin: 5px;
+        text-decoration: none;
+        color: var(--dark);
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .book-card-alt {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        text-decoration: none;
+        color: inherit;
+        margin-bottom: 20px;
+    }
+
+    .book-card-alt img { width: 80px; height: 110px; border-radius: 12px; object-fit: cover; }
+    .book-card-alt h4 { margin: 0; font-size: 1rem; }
+    .book-card-alt p { margin: 5px 0 0; color: var(--primary); font-weight: 800; }
+
+    .section-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: var(--secondary);
+        font-weight: 800;
+        margin-bottom: 15px;
+        display: block;
+    }
+
+    @media (max-width: 900px) {
+        .bento-container { grid-template-columns: 1fr; grid-template-rows: auto; }
+        .hero-creative { flex-direction: column; padding: 60px 20px; text-align: center; }
+        .hero-text h1 { font-size: 3rem; }
     }
 </style>
 
-<!-- Hero Section -->
-<section class="hero-minimal">
-    <div class="hero-content">
-        <h1>Temukan Dunia dalam Setiap Halaman</h1>
-        <p>Ribuan buku berkualitas siap menemani perjalanan literasi Anda</p>
-        <a href="user/browse-books.php" class="hero-btn">Jelajahi Koleksi</a>
+<section class="hero-creative">
+    <div class="hero-text">
+        <span class="section-label">Est. 2026</span>
+        <h1>Curated.<br>Unlimited.</h1>
+        <p>Bukan sekadar toko, TokoBook adalah perjalanan imajinasi yang dikurasi khusus untuk Anda.</p>
+        <a href="user/browse-books.php" class="btn-main">Mulai Petualangan</a>
+    </div>
+    <div class="hero-visual">
+        <div class="floating-card">
+            <div style="padding: 40px; color: white;">
+                <h2 style="font-size: 2.5rem; margin: 0;">Featured<br>Story</h2>
+                <div style="margin-top: 20px; width: 50px; height: 4px; background: white;"></div>
+            </div>
+        </div>
+        <div style="position:absolute; bottom: -20px; right: 20px; width: 150px; height: 150px; background: var(--secondary); border-radius: 50%; z-index: 0; opacity: 0.2;"></div>
     </div>
 </section>
 
-<!-- Featured Books -->
-<section style="padding: 80px 20px;">
-    <div class="container">
-        <div class="section-header">
-            <h2>Buku Terbaru</h2>
-            <p>Koleksi terbaru yang kami rekomendasikan untuk Anda</p>
-        </div>
+<div class="bento-container">
+    <!-- BEST SELLERS -->
+    <div class="bento-item bento-big">
+        <span class="section-label" style="color: #686de0;">Top Picks</span>
+        <h2 style="font-size: 2.5rem; margin-bottom: 40px;">Buku Terlaris <br>Bulan Ini</h2>
         
-        <?php if (count($books) > 0): ?>
-            <div class="book-grid">
-                <?php foreach ($books as $book): ?>
-                    <div class="book-card">
-                        <div class="book-image">
-                            <?php if ($book['image']): ?>
-                                <img src="<?php echo BASE_URL . 'uploads/books/' . $book['image']; ?>" 
-                                     alt="<?php echo htmlspecialchars($book['title']); ?>">
-                            <?php else: ?>
-                                <span style="font-size: 80px; color: #bdc3c7;">📖</span>
-                            <?php endif; ?>
-                        </div>
-                        <div class="book-info">
-                            <span class="book-category"><?php echo htmlspecialchars($book['category_name']); ?></span>
-                            <h3 class="book-title"><?php echo htmlspecialchars($book['title']); ?></h3>
-                            <p class="book-author"><?php echo htmlspecialchars($book['author']); ?></p>
-                            <div class="book-price">Rp <?php echo number_format($book['price'], 0, ',', '.'); ?></div>
-                            <a href="user/browse-books.php" class="book-btn">Lihat Detail</a>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
+        <?php foreach(array_slice($best_sellers, 0, 3) as $book): ?>
+        <a href="user/book-detail.php?id=<?= $book["id"] ?>" class="book-card-alt">
+            <img src="uploads/books/<?= !empty($book["image"]) ? $book["image"] : "default.jpg" ?>" alt="book">
+            <div>
+                <h4><?= htmlspecialchars($book["title"]) ?></h4>
+                <p>Rp<?= number_format($book["price"], 0,",",".") ?></p>
             </div>
-        <?php else: ?>
-            <p style="text-align: center; color: #95a5a6; font-size: 18px;">Belum ada buku tersedia.</p>
-        <?php endif; ?>
-        
-        <div style="text-align: center;">
-            <a href="user/browse-books.php" class="view-all-btn">Lihat Semua Buku</a>
+        </a>
+        <?php endforeach; ?>
+    </div>
+
+    <!-- CATEGORIES -->
+    <div class="bento-item bento-wide">
+        <span class="section-label">Discovery</span>
+        <h3>Jelajahi Berdasarkan Genre</h3>
+        <div style="margin-top: 20px;">
+            <?php foreach($categories as $cat): ?>
+            <a href="user/browse-books.php?category=<?= $cat["id"] ?>" class="cat-pill"><?= htmlspecialchars($cat["name"]) ?></a>
+            <?php endforeach; ?>
         </div>
     </div>
-</section>
 
-<!-- Features Section -->
-<section class="features-section">
-    <div class="container">
-        <div class="section-header">
-            <h2>Mengapa Memilih TokoBook?</h2>
-            <p>Kemudahan dan kenyamanan berbelanja buku online</p>
-        </div>
-        
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">📚</div>
-                <h3>Koleksi Lengkap</h3>
-                <p>Ribuan judul buku dari berbagai kategori dan genre pilihan</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">💰</div>
-                <h3>Harga Terbaik</h3>
-                <p>Harga kompetitif dengan berbagai promo menarik setiap bulan</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">🚚</div>
-                <h3>Pengiriman Cepat</h3>
-                <p>Pengiriman ke seluruh Indonesia dengan layanan terpercaya</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">🔒</div>
-                <h3>Transaksi Aman</h3>
-                <p>Sistem pembayaran yang aman dan terpercaya untuk kenyamanan Anda</p>
-            </div>
-        </div>
+    <!-- SMALL FEATURE 1 -->
+    <div class="bento-item">
+        <span class="section-label">Service</span>
+        <h3 style="font-size: 1.2rem;">Pengiriman Express</h3>
+        <p style="font-size: 0.9rem; color: #888;">Sampai di rumah Anda sebelum kopi Anda dingin.</p>
     </div>
-</section>
 
-<?php include 'includes/footer.php'; ?>
+    <!-- SMALL FEATURE 2 -->
+    <div class="bento-item">
+        <span class="section-label">Trust</span>
+        <h3 style="font-size: 1.2rem;">100% Original</h3>
+        <p style="font-size: 0.9rem; color: #888;">Hanya buku asli dari penerbit terpercaya.</p>
+    </div>
+</div>
+
+<div style="text-align: center; padding: 100px 20px;">
+    <h2 style="font-size: 3rem; margin-bottom: 20px;">Siap Menemukan Dunia Baru?</h2>
+    <a href="user/browse-books.php" style="color: var(--primary); font-weight: 800; text-decoration: none; font-size: 1.5rem; border-bottom: 4px solid var(--primary);">Buka Katalog Sekarang ?</a>
+</div>
+
+<?php include "includes/footer.php"; ?>

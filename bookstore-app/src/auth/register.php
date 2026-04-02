@@ -8,53 +8,69 @@ $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $name = trim($_POST['name']);
+    $username = trim($_POST['username']);
     $email = trim($_POST['email']);
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
     $phone = trim($_POST['phone']);
     $address = trim($_POST['address']);
 
-    // Validasi
-    if (empty($name) || empty($email) || empty($password)) {
+    // Backend Validation
+    if (empty($name) || empty($username) || empty($email) || empty($password)) {
         $error = 'Semua field wajib diisi!';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Format email tidak valid!';
-    } elseif (strlen($password) < 6) {
-        $error = 'Password minimal 6 karakter!';
+    } elseif (strlen($username) < 4) {
+        $error = 'Username minimal 4 karakter!';
+    } elseif (strlen($password) < 8) {
+        $error = 'Password minimal 8 karakter!';
     } elseif ($password !== $confirm_password) {
-        $error = 'Password tidak cocok!';
+        $error = 'Konfirmasi password tidak cocok!';
     } else {
-        $database = new Database();
-        $db = $database->getConnection();
+        try {
+            $database = new Database();
+            $db = $database->getConnection();
 
-        // Cek email sudah terdaftar
-        $query = "SELECT id FROM users WHERE email = :email";
-        $stmt = $db->prepare($query);
-        $stmt->bindParam(':email', $email);
-        $stmt->execute();
-
-        if ($stmt->rowCount() > 0) {
-            $error = 'Email sudah terdaftar!';
-        } else {
-            // Insert user baru
-            $query = "INSERT INTO users (name, email, password, phone, address) 
-                      VALUES (:name, :email, :password, :phone, :address)";
+            // Check if email or username already exists
+            $query = "SELECT id FROM users WHERE email = :email OR username = :username";
             $stmt = $db->prepare($query);
-            
-            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            
-            $stmt->bindParam(':name', $name);
             $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':password', $hashed_password);
-            $stmt->bindParam(':phone', $phone);
-            $stmt->bindParam(':address', $address);
+            $stmt->bindParam(':username', $username);
+            $stmt->execute();
 
-            if ($stmt->execute()) {
-                $success = 'Registrasi berhasil! Silakan login.';
-                header("refresh:2;url=login.php");
+            if ($stmt->rowCount() > 0) {
+                while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    if ($row['email'] === $email) {
+                        $error = 'Email sudah terdaftar!';
+                    } else {
+                        $error = 'Username sudah digunakan!';
+                    }
+                }
             } else {
-                $error = 'Registrasi gagal. Silakan coba lagi.';
+                // Insert new user
+                $query = "INSERT INTO users (name, username, email, password, phone, address) 
+                          VALUES (:name, :username, :email, :password, :phone, :address)";
+                $stmt = $db->prepare($query);
+                
+                // Using PASSWORD_DEFAULT (standard bcrypt in PHP)
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                
+                $stmt->bindParam(':name', $name);
+                $stmt->bindParam(':username', $username);
+                $stmt->bindParam(':email', $email);
+                $stmt->bindParam(':password', $hashed_password);
+                $stmt->bindParam(':phone', $phone);
+                $stmt->bindParam(':address', $address);
+
+                if ($stmt->execute()) {
+                    $success = 'Registrasi berhasil! Mengalihkan ke halaman login...';
+                    header("refresh:2;url=login.php");
+                } else {
+                    $error = 'Registrasi gagal. Silakan coba lagi.';
+                }
             }
+        } catch (Exception $e) {
+            $error = 'Terjadi kesalahan sistem: ' . $e->getMessage();
         }
     }
 }
@@ -66,146 +82,110 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register - TokoBook</title>
-    <link rel="stylesheet" href="../assets/css/styles.css">
+    <!-- Modern UI using Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: Arial, sans-serif;
-        }
-        .register-container {
-            max-width: 500px;
-            margin: 50px auto;
-            padding: 30px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        .register-container h2 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #2c3e50;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #555;
-        }
-        .form-group input,
-        .form-group textarea {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-            box-sizing: border-box;
-        }
-        .form-group textarea {
-            resize: vertical;
-            min-height: 80px;
-        }
-        .btn-register {
-            width: 100%;
-            padding: 12px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-        .btn-register:hover {
-            background: #5568d3;
-        }
-        .login-link {
-            text-align: center;
-            margin-top: 20px;
-        }
-        .login-link a {
-            color: #667eea;
-            text-decoration: none;
-        }
-        .login-link a:hover {
-            text-decoration: underline;
-        }
-        .alert {
-            padding: 12px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-        }
-        .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
+        body { font-family: 'Inter', sans-serif; }
     </style>
 </head>
-<body>
-    <div class="register-container">
-        <h2>📝 Register Akun Baru</h2>
-        
-        <?php if ($error): ?>
-            <div class="alert alert-error"><?php echo $error; ?></div>
-        <?php endif; ?>
-        
-        <?php if ($success): ?>
-            <div class="alert alert-success"><?php echo $success; ?></div>
-        <?php endif; ?>
-
-        <form method="POST" action="">
-            <div class="form-group">
-                <label for="name">Nama Lengkap *</label>
-                <input type="text" id="name" name="name" required 
-                       value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>">
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-md bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div class="p-8">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-800">Daftar Akun</h2>
+                <p class="text-gray-500 mt-2 text-sm">Bergabunglah dengan komunitas pembaca kami</p>
             </div>
+            
+            <?php if ($error): ?>
+                <div class="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm">
+                    <?php echo $error; ?>
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($success): ?>
+                <div class="mb-6 p-4 bg-green-50 border-l-4 border-green-500 text-green-700 text-sm">
+                    <?php echo $success; ?>
+                </div>
+            <?php endif; ?>
 
-            <div class="form-group">
-                <label for="email">Email *</label>
-                <input type="email" id="email" name="email" required 
-                       value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+            <form method="POST" action="" class="space-y-4" id="registerForm">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Nama Lengkap</label>
+                        <input type="text" name="name" required placeholder="John Doe"
+                               class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                               value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Username</label>
+                        <input type="text" name="username" required minlength="4" placeholder="johndoe123"
+                               class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                               value="<?php echo isset($_POST['username']) ? htmlspecialchars($_POST['username']) : ''; ?>">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Email</label>
+                    <input type="email" name="email" required placeholder="email@contoh.com"
+                           class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                           value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Password</label>
+                        <input type="password" id="password" name="password" required minlength="8" placeholder="••••••••"
+                               class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Konfirmasi</label>
+                        <input type="password" id="confirm_password" name="confirm_password" required placeholder="••••••••"
+                               class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">No. Telepon <span class="text-gray-400 font-normal text-[10px]">(Opsional)</span></label>
+                    <input type="tel" name="phone" placeholder="0812XXX"
+                           class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                           value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>">
+                </div>
+                
+                <input type="hidden" name="address" value="">
+
+                <button type="submit" 
+                        class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-[0.98]">
+                    Daftar Sekarang
+                </button>
+            </form>
+
+            <div class="mt-8 pt-6 border-t border-gray-100 text-center">
+                <p class="text-gray-600 text-sm">
+                    Sudah punya akun? 
+                    <a href="login.php" class="text-indigo-600 font-semibold hover:text-indigo-800 transition-colors">Masuk</a>
+                </p>
+                <a href="../index.php" class="inline-block mt-4 text-xs text-gray-400 hover:text-gray-600">
+                    &larr; Kembali ke Beranda
+                </a>
             </div>
-
-            <div class="form-group">
-                <label for="phone">No. Telepon</label>
-                <input type="tel" id="phone" name="phone" 
-                       value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>">
-            </div>
-
-            <div class="form-group">
-                <label for="address">Alamat</label>
-                <textarea id="address" name="address"><?php echo isset($_POST['address']) ? htmlspecialchars($_POST['address']) : ''; ?></textarea>
-            </div>
-
-            <div class="form-group">
-                <label for="password">Password * (min. 6 karakter)</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-
-            <div class="form-group">
-                <label for="confirm_password">Konfirmasi Password *</label>
-                <input type="password" id="confirm_password" name="confirm_password" required>
-            </div>
-
-            <button type="submit" class="btn-register">Daftar</button>
-        </form>
-
-        <div class="login-link">
-            Sudah punya akun? <a href="login.php">Login di sini</a> | 
-            <a href="../index.php">Kembali ke Beranda</a>
         </div>
     </div>
+
+    <!-- Frontend Validation -->
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', (e) => {
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+
+            if (password !== confirmPassword) {
+                e.preventDefault();
+                alert('Konfirmasi password tidak cocok!');
+            } else if (password.length < 8) {
+                e.preventDefault();
+                alert('Password minimal harus 8 karakter!');
+            }
+        });
+    </script>
 </body>
 </html>
